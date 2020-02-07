@@ -6,7 +6,7 @@
             <AutoVariable width="fill" target="autorepair.sentry" label="Repair Sentry"/> 
             <AutoVariable width="fill" target="autorepair.dispenser" label="Repair Dispenser"/> 
             <AutoVariable width="fill" target="autorepair.teleport" label="Repair Teleporter"/> 
-            <LabeledObject width="fill" label="Priority"> 
+            <LabeledObject width="fill" label="Building Priority"> 
                 <Select target="autorepair.priority"> 
                     <Option name="None" value="0"/> 
                     <Option name="Sentry" value="1"/> 
