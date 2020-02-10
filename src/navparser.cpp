@@ -397,7 +397,8 @@ struct Graph : public micropather::Graph
             int isIgnored       = ignoremanager::isIgnored(center, neighbour);
             if (isIgnored == 2)
                 continue;
-            float distance = center->m_center.DistTo(i.area->m_center);
+
+            float distance = center->m_center.DistTo(GetClosestNavAreaPoint(center->m_center, neighbour));
             if (isIgnored == 1)
             {
                 if (*vischeckBlock)
@@ -411,7 +412,7 @@ struct Graph : public micropather::Graph
     {
         CNavArea *start = reinterpret_cast<CNavArea *>(stateStart);
         CNavArea *end   = reinterpret_cast<CNavArea *>(stateEnd);
-        return start->m_center.DistTo(end->m_center);
+        return start->m_center.DistTo(GetClosestNavAreaPoint(start->m_center, end));
     }
     void PrintStateInfo(void *) override
     {
@@ -646,8 +647,27 @@ static void cm()
         crumb_vec = &(*crumb)->m_center;
 
     ReadyForCommands = false;
+    // closest crumb to our origin and the next crumb
+    Vector closest_to_crumb;
+    if (crumb_vec == &endPoint)
+        closest_to_crumb = GetClosestNavAreaPoint(LOCAL_E->m_vecOrigin(), *crumb);
+    else
+    {
+        closest_to_crumb = GetClosestNavAreaPoint((LOCAL_E->m_vecOrigin() + crumbs[1]->m_center) / 2.0f, *crumb);
+    }
+    // Fix z
+    float dist_to_nw     = closest_to_crumb.DistTo((*crumb)->m_nwCorner);
+    float dist_to_se     = closest_to_crumb.DistTo((*crumb)->m_seCorner);
+    float dist_to_center = closest_to_crumb.DistTo((*crumb)->m_center);
+    if (dist_to_nw <= dist_to_se && dist_to_nw <= dist_to_center)
+        closest_to_crumb.z = (*crumb)->m_nwCorner.z;
+    else if (dist_to_se <= dist_to_nw && dist_to_se <= dist_to_center)
+        closest_to_crumb.z = (*crumb)->m_seCorner.z;
+    else
+        closest_to_crumb.z = (*crumb)->m_center.z;
+
     // Remove old crumbs
-    if (g_pLocalPlayer->v_Origin.DistTo(*crumb_vec) < 50.0f)
+    if (g_pLocalPlayer->v_Origin.DistTo(closest_to_crumb) < 50.0f)
     {
         inactivity.update();
         if (crumb_vec == &endPoint)
@@ -670,7 +690,7 @@ static void cm()
     }
     if (look && LookAtPathTimer.check(1000))
     {
-        Vector next{ crumb_vec->x, crumb_vec->y, g_pLocalPlayer->v_Eye.z };
+        Vector next{ closest_to_crumb.x, closest_to_crumb.y, g_pLocalPlayer->v_Eye.z };
         next = GetAimAtAngles(g_pLocalPlayer->v_Eye, next);
         DoSlowAim(next);
         current_user_cmd->viewangles = next;
@@ -681,7 +701,7 @@ static void cm()
         current_user_cmd->buttons |= IN_JUMP;
     }
     // Walk to next crumb
-    WalkTo(*crumb_vec);
+    WalkTo(closest_to_crumb);
     /* If can't go through for some time (doors aren't instantly opening)
      * ignore that connection
      * Or if inactive for too long
