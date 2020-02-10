@@ -398,7 +398,7 @@ struct Graph : public micropather::Graph
             if (isIgnored == 2)
                 continue;
 
-            float distance = center->m_center.DistTo(GetClosestNavAreaPoint(center->m_center, neighbour));
+            float distance = center->m_center.DistTo(neighbour->m_center);
             if (isIgnored == 1)
             {
                 if (*vischeckBlock)
@@ -412,7 +412,7 @@ struct Graph : public micropather::Graph
     {
         CNavArea *start = reinterpret_cast<CNavArea *>(stateStart);
         CNavArea *end   = reinterpret_cast<CNavArea *>(stateEnd);
-        return start->m_center.DistTo(GetClosestNavAreaPoint(start->m_center, end));
+        return start->m_center.DistTo(end->m_center);
     }
     void PrintStateInfo(void *) override
     {
@@ -648,13 +648,8 @@ static void cm()
 
     ReadyForCommands = false;
     // closest crumb to our origin and the next crumb
-    Vector closest_to_crumb;
-    if (crumb_vec == &endPoint)
-        closest_to_crumb = GetClosestNavAreaPoint(LOCAL_E->m_vecOrigin(), *crumb);
-    else
-    {
-        closest_to_crumb = GetClosestNavAreaPoint((LOCAL_E->m_vecOrigin() + crumbs[1]->m_center) / 2.0f, *crumb);
-    }
+    Vector closest_to_crumb = GetClosestNavAreaPoint(LOCAL_E->m_vecOrigin(), *crumb);
+
     // Fix z
     float dist_to_nw     = closest_to_crumb.DistTo((*crumb)->m_nwCorner);
     float dist_to_se     = closest_to_crumb.DistTo((*crumb)->m_seCorner);
