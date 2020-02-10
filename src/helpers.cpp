@@ -1544,6 +1544,10 @@ Vector GetClosestLinePoint(Vector A, Vector B, Vector pos)
     float diff_x = B.x - A.x;
     float diff_y = B.y - A.y;
 
+    // Division by 0 sounds bad
+    if (diff_x == 0.0f && diff_y == 0.0f)
+        return A;
+
     // Formula for getting angle between A and B on the x axis, in Radiants here btw
     float ang = asin(diff_y / (sqrt(pow(diff_x, 2) + pow(diff_y, 2))));
     // "Opposite" of that angle
