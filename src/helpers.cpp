@@ -1660,6 +1660,9 @@ Vector GetClosestNavAreaPoint(Vector center, CNavArea *neighbour)
         // Rotate back
         Vector seg_b_abs(rel_rotated_b.x * cos(ang), rel_rotated_b.x * sin(ang), 0.0f);
 
+        // Shrunk too much, just set to center
+        if (seg_a_abs.x > seg_b_abs.x)
+            seg_a_abs = seg_b_abs = (line.segment_a + line.segment_b) / 2.0f;
         // Apply
         line.segment_a = seg_a_abs;
         line.segment_b = seg_b_abs;
