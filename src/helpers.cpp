@@ -1521,6 +1521,180 @@ std::unique_ptr<char[]> strfmt(const char *fmt, ...)
     return buf;
 }
 
+// 2D btw
+// A is line start, B is line end, pos is the position we want to get the nearest point on the line from
+Vector GetClosestLinePoint(Vector A, Vector B, Vector pos)
+{
+    A.z = 0.0f;
+    B.z = 0.0f;
+
+    // B should be after A, not before
+    if (A.x > B.x)
+    {
+        // First we need to sort some things about this line segment to ensure the math works
+        Vector temp_a = A, temp_b = B;
+        temp_a = A;
+        temp_b = B;
+        // Flip a and B
+        A = temp_b;
+        B = temp_a;
+    }
+
+    // We use this a bunch, so save it
+    float diff_x = B.x - A.x;
+    float diff_y = B.y - A.y;
+
+    // Formula for getting angle between A and B on the x axis, in Radiants here btw
+    float ang = asin(diff_y / (sqrt(pow(diff_x, 2) + pow(diff_y, 2))));
+    // "Opposite" of that angle
+    float ang2 = DEG2RAD(360) - ang;
+
+    // We need this later to check if the point is above the line, it rotates B onto the x axis
+    Vector B2 = A + Vector{ diff_x * cos(ang2) - diff_y * sin(ang2), diff_x * sin(ang2) + diff_y * cos(ang2), 0.0f };
+
+    // We once again use this quite a few times so make variables for it
+    float pos_diff_x = pos.x - A.x;
+    float pos_diff_y = pos.y - A.y;
+
+    // Position relative to A rotated onto the x axis
+    Vector rel_pos_rotated{ pos_diff_x * cos(ang2) - pos_diff_y * sin(ang2), pos_diff_x * sin(ang2) + pos_diff_y * cos(ang2), 0.0f };
+
+    // Position in World of the rotated Vector
+    Vector abs_pos_rotated = rel_pos_rotated + A;
+
+    // This is the closest point on the line to our position, it's relative to A though and we need to rotate it back
+    Vector closest_point_rel = { rel_pos_rotated.x, 0.0f, 0.0f };
+
+    // A is closest
+    if (abs_pos_rotated.x < A.x)
+    {
+        // closest point is relative to a here, so it's 0 units away from a
+        closest_point_rel = Vector(0.0f);
+    }
+    // B is closest
+    if (abs_pos_rotated.x > B2.x)
+    {
+        // closest point is relative to A here, so it's {B2.x, 0.0f, 0.0f} since it has to intersect the line
+        closest_point_rel = { B2.x, 0.0f, 0.0f };
+    }
+    // Rotate it back and make it non relative, y is 0 so we don't need to do math on it
+    Vector closest_point = A + Vector{ closest_point_rel.x * cos(ang2), closest_point_rel.x * sin(ang2), 0.0f };
+
+    return closest_point;
+}
+
+struct line
+{
+    Vector segment_a;
+    Vector segment_b;
+};
+// Returns the point of neighbor closest to center
+Vector GetClosestNavAreaPoint(Vector center, CNavArea *neighbour)
+{
+    // The corners
+    std::array<Vector, 4> corners = { neighbour->m_nwCorner, neighbour->m_seCorner };
+    corners[2]                    = { corners[0].x, corners[1].y, corners[0].z };
+    corners[3]                    = { corners[1].x, corners[0].y, corners[1].z };
+
+    // we NEED to ignore the corners because we can't know if there is a diagonal area or not
+    std::array<line, 4> lines{ line{ corners[0], corners[2] }, line{ corners[0], corners[3] }, line{ corners[1], corners[2] }, line{ corners[1], corners[3] } };
+
+    for (auto &line : lines)
+    {
+        // Order correctly
+        if (line.segment_a.x > line.segment_b.x)
+        {
+            Vector temp_a, temp_b;
+
+            temp_a = line.segment_a;
+            temp_b = line.segment_b;
+            // Flip a and B
+            line.segment_a = temp_b;
+            line.segment_b = temp_a;
+        }
+        // Remove lines that are not near other areas
+
+        // clang-format off
+
+        if (
+            // left
+            (!neighbour->has_xneg_neighbour && line.segment_a.x < neighbour->m_center.x && line.segment_b.x < neighbour->m_center.x) ||
+            // right
+            (!neighbour->has_xpos_neighbour && line.segment_a.x > neighbour->m_center.x && line.segment_b.x > neighbour->m_center.x) ||
+            // down
+            (!neighbour->has_yneg_neighbour && line.segment_a.y < neighbour->m_center.y && line.segment_b.y < neighbour->m_center.y) ||
+            // up
+            (!neighbour->has_ypos_neighbour && line.segment_a.y > neighbour->m_center.y && line.segment_b.y > neighbour->m_center.y))
+        {
+            line.segment_a.Zero();
+            line.segment_b.Zero();
+            continue;
+        }
+        // clang-format on
+
+        // Difference
+        float diff_x = line.segment_b.x - line.segment_a.x;
+        float diff_y = line.segment_b.y - line.segment_a.y;
+
+        // Angle to rotate b by
+        float ang = asin(diff_y / (sqrt(pow(diff_x, 2) + pow(diff_y, 2))));
+
+        // We need the reverse
+        float ang2 = DEG2RAD(360) - ang;
+
+        // Relative and rotated
+        Vector rel_rotated_b(diff_x * cos(ang2) - diff_y * sin(ang2), diff_x * sin(ang2) + diff_y * cos(ang2), 0.0f);
+
+        // What we need to add to a (after rotation)
+        Vector add_a = { 10.0f, 0.0f, 0.0f };
+
+        // Player is 57.0f HU wide
+        float half_width = 57.0f / 2.0f;
+
+        // Subtract the half width from our rotated b
+        rel_rotated_b.x -= half_width;
+
+        // Rotate a segment back
+        Vector seg_a_abs(add_a.x * cos(ang), add_a.x * sin(ang), 0.0f);
+
+        // Rotate back
+        Vector seg_b_abs(rel_rotated_b.x * cos(ang), rel_rotated_b.x * sin(ang), 0.0f);
+
+        // Apply
+        line.segment_a = seg_a_abs;
+        line.segment_b = seg_b_abs;
+    }
+    // clang-format off
+
+    // Closest point for every line
+    std::array<Vector,4> points = { GetClosestLinePoint(lines[0].segment_a, lines[0].segment_b, center),
+                                   GetClosestLinePoint(lines[1].segment_a, lines[1].segment_b, center),
+                                   GetClosestLinePoint(lines[2].segment_a, lines[2].segment_b, center),
+                                   GetClosestLinePoint(lines[3].segment_a, lines[3].segment_b, center)};
+    // clang-format on
+
+    // Get Distance from center for each spot
+    std::array<float, 4> distances = { points[0].DistTo(center), points[1].DistTo(center), points[2].DistTo(center), points[3].DistTo(center) };
+
+    // Ignore bad lines
+    for (int i = 0; i < 4; i++)
+    {
+        // Invalid
+        if (lines[i].segment_a.IsZero() && lines[i].segment_b.IsZero())
+            distances[i] = FLT_MAX;
+    }
+
+    // Smallest value
+    auto smallest_value = std::min_element(distances.begin(), distances.end());
+    if (neighbour->m_center.DistTo(center) < *smallest_value)
+        return neighbour->m_center;
+    // Get index of that value
+    int idx = smallest_value - distances.begin();
+
+    // Return closest point
+    return points[idx];
+}
+
 void ChangeName(std::string name)
 {
     auto custom_name = settings::Manager::instance().lookup("name.custom");

@@ -226,6 +226,9 @@ bool init(bool first_cm)
         // Add all sniper spots to vector
         for (auto &area : nav::navfile->m_areas)
         {
+            // Not suited
+            if (area.m_attributeFlags & NAV_MESH_DONT_HIDE)
+                continue;
             for (auto hide : area.m_hidingSpots)
                 if (hide.IsGoodSniperSpot() || hide.IsIdealSniperSpot() || hide.IsExposed())
                     sniper_spots.emplace_back(&area, hide.m_pos);

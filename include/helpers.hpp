@@ -15,6 +15,7 @@ class CUserCmd;
 class CCommand;
 struct player_info_s;
 class Vector;
+class CNavArea;
 
 class ICvar;
 void SetCVarInterface(ICvar *iface);
@@ -190,6 +191,8 @@ void WalkTo(const Vector &vector);
 std::string GetLevelName();
 
 void format_internal(std::stringstream &stream);
+Vector GetClosestLinePoint(Vector A, Vector B, Vector pos);
+Vector GetClosestNavAreaPoint(Vector center, CNavArea *neighbour);
 template <typename T, typename... Targs> void format_internal(std::stringstream &stream, T value, Targs... args)
 {
     stream << value;
