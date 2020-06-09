@@ -203,6 +203,7 @@ public:
     offset_t m_nFlagType;
     offset_t m_nFlagStatus;
 
+    offset_t m_bTeamCanCap;
     offset_t m_iNumControlPoints;
     offset_t m_vCPPositions;
     offset_t m_iOwningTeam;

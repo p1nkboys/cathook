@@ -121,6 +121,7 @@ void NetVars::Init()
         this->m_nFlagStatus = gNetvars.get_offset("DT_CaptureFlag", "m_nFlagStatus");
 
         // ObjectiveResource
+        this->m_bTeamCanCap        = gNetvars.get_offset("DT_BaseTeamObjectiveResource", "m_bTeamCanCap");
         this->m_iNumControlPoints  = gNetvars.get_offset("DT_BaseTeamObjectiveResource", "m_iNumControlPoints");
         this->m_vCPPositions       = gNetvars.get_offset("DT_BaseTeamObjectiveResource", "m_vCPPositions[0]");
         this->m_iOwningTeam        = gNetvars.get_offset("DT_BaseTeamObjectiveResource", "m_iOwner");

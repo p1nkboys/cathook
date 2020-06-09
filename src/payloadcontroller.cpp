@@ -33,7 +33,7 @@ void Update()
 std::optional<Vector> getClosestPayload(Vector source, int team)
 {
     // Invalid team
-    if (team < TEAM_RED || team < TEAM_BLU)
+    if (team < TEAM_RED || team > TEAM_BLU)
         return std::nullopt;
     // Convert to index
     int index  = team - TEAM_RED;

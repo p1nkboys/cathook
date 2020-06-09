@@ -18,6 +18,7 @@ static settings::Boolean enabled{ "misc.pathing", "true" };
 static settings::Boolean vischecks{ "misc.pathing.pathtime-vischecks", "true" };
 static settings::Boolean vischeckBlock{ "misc.pathing.pathtime-vischeck-block", "false" };
 static settings::Boolean draw{ "misc.pathing.draw", "false" };
+static settings::Boolean draw_priorities{ "misc.pathing.draw-priorities", "false" };
 static settings::Boolean look{ "misc.pathing.look-at-path", "false" };
 static settings::Int stuck_time{ "misc.pathing.stuck-time", "4000" };
 static settings::Int unreachable_time{ "misc.pathing.unreachable-time", "1000" };
@@ -89,6 +90,13 @@ Vector GetClosestCornerToArea(CNavArea *CornerOf, const Vector &target)
     return (*bestVec + *bestVec2) / 2;
 }
 
+// Get the area score multiplier
+float getAreaScoreMultiplier(float score)
+{
+    // Formula to calculate by how much % to reduce the distance by (https://xaktly.com/LogisticFunctions.html)
+    return 2.0f * ((0.9f) / (1.0f + exp(-0.2f * score)) - 0.45f);
+}
+
 float getZBetweenAreas(CNavArea *start, CNavArea *end)
 {
     float z1 = GetClosestCornerToArea(start, end->m_center).z;
@@ -119,7 +127,6 @@ static ignore_status vischeck(CNavArea *begin, CNavArea *end)
 }
 static ignore_status runIgnoreChecks(CNavArea *begin, CNavArea *end)
 {
-    // No z check Should be done for stairs as they can go very far up
     if (getZBetweenAreas(begin, end) > 70)
         return const_ignored;
     if (!vischecks)
@@ -427,7 +434,7 @@ struct Graph : public micropather::Graph
             {
                 float score = area_score[neighbour->m_id];
                 // Formula to calculate by how much % to reduce the distance by (https://xaktly.com/LogisticFunctions.html)
-                float multiplier = 2.0f * ((0.9f) / (1.0f + exp(-0.8f * score)) - 0.45f);
+                float multiplier = getAreaScoreMultiplier(score);
                 distance *= 1.0f - multiplier;
             }
 
@@ -658,7 +665,7 @@ void updateAreaScore()
         // Get area
         CNavArea *closest_area = nullptr;
         if (ent->m_vecDormantOrigin())
-            findClosestNavSquare(*ent->m_vecDormantOrigin());
+            closest_area = findClosestNavSquare(*ent->m_vecDormantOrigin());
 
         // Add usage to area if valid
         if (closest_area)
@@ -735,21 +742,35 @@ static void cm()
         DoSlowAim(next);
         current_user_cmd->viewangles = next;
     }
+    // Used to determine if we want to jump or if we want to crouch
+    static bool crouch          = false;
+    static int ticks_since_jump = 0;
+
     // Detect when jumping is necessary
-    if ((!(g_pLocalPlayer->holding_sniper_rifle && g_pLocalPlayer->bZoomed) && crumb_vec->z - g_pLocalPlayer->v_Origin.z > 18 && last_jump.check(200)) || (last_jump.check(200) && inactivity.check(*stuck_time / 2)))
+    if ((!(g_pLocalPlayer->holding_sniper_rifle && g_pLocalPlayer->bZoomed) && (crouch || crumb_vec->z - g_pLocalPlayer->v_Origin.z > 18) && last_jump.check(200)) || (last_jump.check(200) && inactivity.check(*stuck_time / 2)))
     {
         auto local = findClosestNavSquare(g_pLocalPlayer->v_Origin);
         // Check if current area allows jumping
         if (!local || !(local->m_attributeFlags & (NAV_MESH_NO_JUMP | NAV_MESH_STAIRS)))
         {
-            static bool flip_action = false;
-            // Make it crouch the second tick
-            current_user_cmd->buttons |= flip_action ? IN_DUCK : IN_JUMP;
+            // Make it crouch until we land, but jump the first tick
+            current_user_cmd->buttons |= crouch ? IN_DUCK : IN_JUMP;
 
-            // Update jump timer now
-            if (flip_action)
+            // Only flip to crouch state, not to jump state
+            if (!crouch)
+            {
+                crouch           = true;
+                ticks_since_jump = 0;
+            }
+            ticks_since_jump++;
+
+            // Update jump timer now since we are back on ground
+            if (crouch && CE_INT(LOCAL_E, netvar.iFlags) & FL_ONGROUND && ticks_since_jump > 3)
+            {
+                // Reset
+                crouch = false;
                 last_jump.update();
-            flip_action = !flip_action;
+            }
         }
     }
     // Walk to next crumb
@@ -778,25 +799,56 @@ static void drawcrumbs()
         return;
     if (!LOCAL_E->m_bAlivePlayer())
         return;
+    if (draw_priorities)
+    {
+        if (navfile && navfile->m_areas.size() && enabled && nav::status == nav::on)
+            for (auto &area : navfile->m_areas)
+            {
+                Vector &pos = area.m_center;
+                if (pos.DistTo(LOCAL_E->m_vecOrigin()) > 300.0f)
+                    continue;
+                Vector wts;
+                if (draw::WorldToScreen(pos, wts))
+                {
+                    float score             = area_score[area.m_id];
+                    float multiplier        = getAreaScoreMultiplier(score);
+                    std::string draw_string = std::to_string(multiplier);
+                    draw::String(wts.x, wts.y, colors::white, draw_string.c_str(), *fonts::esp);
+                }
+            }
+    }
     if (crumbs.size() < 2)
         return;
     for (size_t i = 0; i < crumbs.size(); i++)
     {
         Vector wts1, wts2, *o1, *o2;
+        rgba_t draw_color = colors::white;
         if (crumbs.size() - 1 == i)
         {
             if (!endPoint.IsValid())
                 break;
 
-            o2 = &endPoint;
+            o2          = &endPoint;
+            float score = area_score[crumbs.at(i)->m_id];
+            // Formula to calculate by how much % to reduce the distance by (https://xaktly.com/LogisticFunctions.html)
+            float multiplier = getAreaScoreMultiplier(score);
+            // Calculate the color
+            draw_color = colors::Fade(colors::white, colors::red, multiplier * (PI / 2.0));
         }
         else
-            o2 = &crumbs[i + 1]->m_center;
+        {
+            o2          = &crumbs[i + 1]->m_center;
+            float score = area_score[crumbs.at(i + 1)->m_id];
+            // Formula to calculate by how much % to reduce the distance by (https://xaktly.com/LogisticFunctions.html)
+            float multiplier = getAreaScoreMultiplier(score);
+            // Calculate the color
+            draw_color = colors::Fade(colors::white, colors::red, multiplier * (PI / 2.0));
+        }
 
         o1 = &crumbs[i]->m_center;
         if (draw::WorldToScreen(*o1, wts1) && draw::WorldToScreen(*o2, wts2))
         {
-            draw::Line(wts1.x, wts1.y, wts2.x - wts1.x, wts2.y - wts1.y, colors::white, 0.3f);
+            draw::Line(wts1.x, wts1.y, wts2.x - wts1.x, wts2.y - wts1.y, draw_color, 0.7f);
         }
     }
     Vector wts;

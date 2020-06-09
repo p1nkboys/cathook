@@ -5,7 +5,21 @@ namespace cpcontroller
 
 std::array<cp_info, MAX_CONTROL_POINTS> controlpoint_data;
 CachedEntity *objective_resource = nullptr;
-bool is_cp                       = true;
+
+struct point_ignore
+{
+    std::string mapname;
+    int point_idx;
+    point_ignore(std::string str, int idx) : mapname{ str }, point_idx{ idx } {};
+};
+
+// TODO: Find a way to fix these edge-cases.
+// clang-format off
+std::array<point_ignore, 1> ignore_points
+{
+    point_ignore("cp_steel", 4)
+};
+// clang-format on
 
 // This function updates the Entity used for the Object resource
 void UpdateObjectiveResource()
@@ -13,19 +27,15 @@ void UpdateObjectiveResource()
     // Already set and valid
     if (CE_GOOD(objective_resource) && objective_resource->m_iClassID() == CL_CLASS(CTFObjectiveResource))
         return;
-    // Find ObjectiveResource
+    // Find ObjectiveResource and gamerules
     for (int i = g_IEngine->GetMaxClients() + 1; i < MAX_ENTITIES; i++)
     {
         CachedEntity *ent = ENTITY(i);
         if (CE_BAD(ent) || ent->m_iClassID() != CL_CLASS(CTFObjectiveResource))
-        {
-            // Not a CP map
-            if (CE_GOOD(ent) && ent->m_iClassID() == CL_CLASS(CFuncTrackTrain))
-                is_cp = false;
             continue;
-        }
         // Found it
         objective_resource = ent;
+        break;
     }
 }
 
@@ -36,13 +46,19 @@ void UpdateObjectiveResource()
 #define GET_CP_LOCKED(index) ((&CE_VAR(objective_resource, netvar.m_bCPLocked, bool))[index])
 #define IN_MINI_ROUND(index) ((&CE_VAR(objective_resource, netvar.m_bInMiniRound, bool))[index])
 
+bool TeamCanCapPoint(int index, int team)
+{
+    int arr_index = index + team * MAX_CONTROL_POINTS;
+    return (&CE_VAR(objective_resource, netvar.m_bTeamCanCap, bool))[arr_index];
+}
+
 int GetPreviousPointForPoint(int index, int team, int previndex)
 {
     int iIntIndex = previndex + (index * MAX_PREVIOUS_POINTS) + (team * MAX_CONTROL_POINTS * MAX_PREVIOUS_POINTS);
     return (&CE_INT(objective_resource, netvar.m_iPreviousPoints))[iIntIndex];
 }
 
-bool GetFarthestOwnedControlPoint(int team)
+int GetFarthestOwnedControlPoint(int team)
 {
     int iOwnedEnd = GET_BASE_CONTROL_POINT_FOR_TEAM(team);
     if (iOwnedEnd == -1)
@@ -74,17 +90,26 @@ bool GetFarthestOwnedControlPoint(int team)
 // Can we cap this point?
 bool isPointUseable(int index, int team)
 {
-    static auto tf_caplinear = g_ICvar->FindVar("tf_caplinear");
-    if (tf_caplinear && !tf_caplinear->GetBool())
-        return true;
-
     // We Own it, can't cap it
     if (GET_OWNING_TEAM(index) == team)
+        return false;
+
+    // Can we cap the point?
+    if (!TeamCanCapPoint(index, team))
         return false;
 
     // We are playing a sectioned map, check if the CP is in it
     if (CE_VAR(objective_resource, netvar.m_bPlayingMiniRounds, bool) && !IN_MINI_ROUND(index))
         return false;
+
+    // Is the point locked?
+    if (GET_CP_LOCKED(index))
+        return false;
+
+    // Linear cap means that it won't require previous points, bail
+    static auto tf_caplinear = g_ICvar->FindVar("tf_caplinear");
+    if (tf_caplinear && !tf_caplinear->GetBool())
+        return true;
 
     // Any previous points necessary?
     int iPointNeeded = GetPreviousPointForPoint(index, team, 0);
@@ -92,10 +117,6 @@ bool isPointUseable(int index, int team)
     // Points set to require themselves are always cappable
     if (iPointNeeded == index)
         return true;
-
-    // Is the point locked?
-    if (GET_CP_LOCKED(index))
-        return false;
 
     // No required points specified? Require all previous points.
     if (iPointNeeded == -1)
@@ -137,14 +158,14 @@ void UpdateControlPoints()
     // No objective ressource, can't run
     if (!objective_resource)
         return;
-
     int num_cp = CE_INT(objective_resource, netvar.m_iNumControlPoints);
     // No control points
     if (!num_cp)
         return;
     // Clear the invalid controlpoints
-    for (int i = num_cp - 1; i < MAX_CONTROL_POINTS; i++)
-        controlpoint_data.at(i) = cp_info();
+    if (num_cp <= MAX_CONTROL_POINTS)
+        for (int i = num_cp; i < MAX_CONTROL_POINTS; i++)
+            controlpoint_data.at(i) = cp_info();
 
     for (int i = 0; i < num_cp; i++)
     {
@@ -169,11 +190,18 @@ void UpdateControlPoints()
 std::optional<Vector> getClosestControlPoint(Vector source, int team)
 {
     // No resource for it
-    if (CE_BAD(objective_resource))
+    if (!objective_resource)
         return std::nullopt;
-    // Not a controll point map
-    if (!is_cp)
+    // Check if it's a cp map
+    static auto tf_gamemode_cp = g_ICvar->FindVar("tf_gamemode_cp");
+    if (!tf_gamemode_cp)
+    {
+        tf_gamemode_cp = g_ICvar->FindVar("tf_gamemode_cp");
         return std::nullopt;
+    }
+    if (!tf_gamemode_cp->GetBool())
+        return std::nullopt;
+
     // Map team to 0-1 and check If Valid
     int team_idx = team - TEAM_RED;
     if (team_idx < 0 || team_idx > 1)
@@ -183,11 +211,24 @@ std::optional<Vector> getClosestControlPoint(Vector source, int team)
     if (!GET_NUM_CONTROL_POINTS())
         return std::nullopt;
 
+    int ignore_index = -1;
+    // Do the points need checking because of the map?
+    auto levelname = GetLevelName();
+    for (auto &ignore : ignore_points)
+    {
+        // Try to find map name in bad point array
+        if (levelname.find(ignore.mapname) != levelname.npos)
+            ignore_index = ignore.point_idx;
+    }
+
     // Find the best and closest control point
     std::optional<Vector> best_cp;
     float best_distance = FLT_MAX;
     for (auto &cp : controlpoint_data)
     {
+        // Ignore this point
+        if (cp.cp_index == ignore_index)
+            continue;
         // They can cap
         if (cp.can_cap.at(team_idx))
         {
@@ -208,7 +249,6 @@ void LevelInit()
     for (auto &cp : controlpoint_data)
         cp = cp_info();
     objective_resource = nullptr;
-    is_cp              = true;
 }
 
 static InitRoutine init([]() {

@@ -70,8 +70,6 @@ static Timer build_timer{};
 static Timer rotation_timer{};
 // Uses to check how long until we should resend the "build" command
 static Timer build_command_timer{};
-// Dispenser Nav cooldown
-static Timer dispenser_nav_timer{};
 // Last Yaw used for building
 static float build_current_rotation = -180.0f;
 // How many times have we tried to place?
@@ -167,7 +165,7 @@ static void CreateMove()
         int metal = -1;
         if (engineer_mode && g_pLocalPlayer->clazz == tf_engineer)
             metal = CE_INT(LOCAL_E, netvar.m_iAmmo + 12);
-        if ((dispenser_nav_timer.test_and_set(1000) && getDispenserHealthAndAmmo(metal)))
+        if (getDispenserHealthAndAmmo(metal))
             return;
         if (getHealthAndAmmo(metal))
             return;
@@ -1001,7 +999,7 @@ static bool CaptureCTF(int team)
             auto our_flag = flagcontroller::getFlag(team);
 
             // Navigate
-            if (our_flag.spawn_pos && nav::navTo(*our_flag.spawn_pos, 7, true, false))
+            if (our_flag.spawn_pos && nav::navTo(*our_flag.spawn_pos, 8, true, false))
             {
                 current_task = task::capture;
                 return true;
@@ -1012,7 +1010,7 @@ static bool CaptureCTF(int team)
     else
     {
         // Get the flag
-        if (nav::navTo(*position, 7, true, false))
+        if (nav::navTo(*position, 8, true, false))
         {
             current_task = task::capture;
             return true;
@@ -1031,7 +1029,7 @@ static bool CaptureCP(int team)
         return false;
 
     // Try to navigate
-    if (nav::navTo(*position, 7, true, true))
+    if (nav::navTo(*position, 8, true, true))
     {
         current_task = task::capture;
         return true;
@@ -1039,6 +1037,7 @@ static bool CaptureCP(int team)
     // Failed
     return false;
 }
+
 static bool CapturePL(int team)
 {
     auto position = plcontroller::getClosestPayload(LOCAL_E->m_vecOrigin(), team);
@@ -1053,12 +1052,12 @@ static bool CapturePL(int team)
     if ((*position).DistTo(LOCAL_E->m_vecOrigin()) <= 40.0f)
     {
         // Clear navigation if priority is low
-        if (nav::curr_priority <= 7 && current_task != task::capture)
+        if (nav::curr_priority <= 8 && current_task != task::capture)
             nav::clearInstructions();
         current_task = task::capture;
         return true;
     }
-    else if (nav::navTo(*position, 7, true, false))
+    else if (nav::navTo(*position, 8, true, false))
     {
         current_task = task::capture;
         return true;
@@ -1092,6 +1091,9 @@ static bool captureObjectives()
         // Success
         return true;
     }
+    // Success
+    else
+        return true;
 
     if (current_task == task::capture)
     {
