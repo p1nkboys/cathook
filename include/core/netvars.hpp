@@ -200,6 +200,18 @@ public:
     offset_t m_iHealingAssist_Resource;
     offset_t m_iPlayerLevel_Resource;
 
+    offset_t m_nFlagType;
+    offset_t m_nFlagStatus;
+
+    offset_t m_iNumControlPoints;
+    offset_t m_vCPPositions;
+    offset_t m_iOwningTeam;
+    offset_t m_bCPLocked;
+    offset_t m_bPlayingMiniRounds;
+    offset_t m_bInMiniRound;
+    offset_t m_iPreviousPoints;
+    offset_t m_iBaseControlPoints;
+
     offset_t m_iPlayerIndex;
 };
 

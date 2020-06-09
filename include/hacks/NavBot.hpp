@@ -17,7 +17,8 @@ enum task : uint8_t
     dispenser,
     followbot,
     outofbounds,
-    engineer
+    engineer,
+    capture
 };
 
 enum engineer_task : uint8_t

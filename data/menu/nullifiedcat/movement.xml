@@ -34,6 +34,7 @@
             <AutoVariable width="fill" target="misc.pathing.draw" label="Draw path"/>
             <AutoVariable width="fill" target="misc.pathing.look-at-path" label="Look at path"/>
             <AutoVariable width="fill" target="navbot.enabled" label="Enable NavBot"/>
+            <AutoVariable width="fill" target="navbot.cap-mode" label="Enable Capping" tooltip="Make bots capture objectives (CTF,CP and PL only as of right now)"/>
             <AutoVariable width="fill" target="navbot.engineer-mode" label="Enable Engineer mode"/>
             <AutoVariable width="fill" target="navbot.get-health-and-ammo" label="Get health and ammo"/>
             <AutoVariable width="fill" target="navbot.spy-mode" label="Enable Spy mode"/>
