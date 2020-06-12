@@ -48,9 +48,9 @@ static settings::Boolean misc_drawhitboxes_dead{ "misc.draw-hitboxes.dead-player
 #endif
 
 #if ENABLE_TEXTMODE
-static settings::Boolean fix_cyoaanim{ "misc.fix-contracker", "true" };
+static settings::Boolean fix_cyoaanim{ "remove.contracker", "true" };
 #else
-static settings::Boolean fix_cyoaanim{ "misc.fix-contracker", "false" };
+static settings::Boolean fix_cyoaanim{ "remove.contracker", "false" };
 #endif
 
 #if !ENFORCE_STREAM_SAFETY && ENABLE_VISUALS

@@ -44,6 +44,34 @@ bool trace::FilterDefault::ShouldHitEntity(IHandleEntity *handle, int mask)
     // TODO magic numbers: invisible entity ids
     case CL_CLASS(CFuncRespawnRoomVisualizer):
     case CL_CLASS(CTFMedigunShield):
+    // Sniper rifle teammate check
+    case CL_CLASS(CTFPlayer):
+    {
+        // Check if self is set
+        if (m_pSelf)
+        {
+            // If what we hit is an enemy it does not matter
+            if (entity && CE_VALID(ENTITY(entity->entindex())) && !ENTITY(entity->entindex())->m_bEnemy())
+            {
+                auto ent = ENTITY(m_pSelf->entindex());
+                // Good player
+                if (CE_GOOD(ent) && ent->m_bAlivePlayer())
+                {
+                    // Get held weapon
+                    auto weapon_idx = CE_INT(ent, netvar.hActiveWeapon) & 0xFFF;
+                    // Check if weapon is valid
+                    if (IDX_GOOD(weapon_idx))
+                    {
+                        auto weapon = ENTITY(weapon_idx);
+                        // If holding sniper rifle
+                        if (weapon->m_iClassID() == CL_CLASS(CTFSniperRifle) || weapon->m_iClassID() == CL_CLASS(CTFSniperRifleDecap))
+                            return false;
+                    }
+                }
+            }
+        }
+        break;
+    }
     case CL_CLASS(CFuncAreaPortalWindow):
         return false;
     }
